@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="تحميل الفيديوهات من جميع مواقع التواصل الاجتماعي">
+    <meta name="theme-color" content="#6366f1">
+    
+    <title>محمّل الفيديوهات</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="icon-wrapper">
+                <img src="icons/icon-192.png" alt="App Icon" class="app-icon">
+            </div>
+            <h1 class="title">محمّل الفيديوهات</h1>
+            <p class="subtitle">حمّل من جميع مواقع التواصل الاجتماعي</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- URL Input -->
+            <div class="input-section">
+                <label for="videoUrl" class="label">الصق رابط الفيديو هنا</label>
+                <div class="input-wrapper">
+                    <input 
+                        type="url" 
+                        id="videoUrl" 
+                        class="url-input" 
+                        placeholder="https://..."
+                        autocomplete="off"
+                    >
+                    <button id="pasteBtn" class="paste-btn" title="لصق">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quality Selection -->
+            <div class="options-section">
+                <label for="quality" class="label">الجودة</label>
+                <select id="quality" class="quality-select">
+                    <option value="best">أفضل جودة (تلقائي)</option>
+                    <option value="2160">4K (2160p)</option>
+                    <option value="1080">Full HD (1080p)</option>
+                    <option value="720">HD (720p)</option>
+                    <option value="480">SD (480p)</option>
+                    <option value="360">360p</option>
+                </select>
+            </div>
+
+            <!-- Audio Only Option -->
+            <div class="checkbox-section">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="audioOnly" class="checkbox">
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-text">تحميل الصوت فقط (MP3)</span>
+                </label>
+            </div>
+
+            <!-- Download Button -->
+            <button id="downloadBtn" class="download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="download-icon">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span class="btn-text">تحميل</span>
+            </button>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-state hidden">
+                <div class="spinner"></div>
+                <p class="loading-text">جاري التحميل...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="error-message hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p id="errorText"></p>
+            </div>
+
+            <!-- Success Message -->
+            <div id="successMessage" class="success-message hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <p>تم التحميل بنجاح!</p>
+            </div>
+        </main>
+
+        <!-- Supported Platforms -->
+        <footer class="footer">
+            <p class="platforms-title">المنصات المدعومة:</p>
+            <div class="platforms">
+                <span class="platform-badge">YouTube</span>
+                <span class="platform-badge">TikTok</span>
+                <span class="platform-badge">Instagram</span>
+                <span class="platform-badge">Twitter/X</span>
+                <span class="platform-badge">Facebook</span>
+                <span class="platform-badge">Snapchat</span>
+                <span class="platform-badge">Pinterest</span>
+                <span class="platform-badge">+المزيد</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Service Worker Registration -->
+    <script src="app.js"></script>
+</body>
+</html>
