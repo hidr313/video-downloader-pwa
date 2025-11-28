@@ -111,6 +111,7 @@ app.post('/api/download', async (req, res) => {
             output: outputPath,
             format: formatSelection,
             mergeOutputFormat: 'mp4',
+            ffmpegLocation: '/usr/bin/ffmpeg', // Explicitly set ffmpeg path
             noWarnings: true,
             noCallHome: true,
             noCheckCertificate: true,
