@@ -45,7 +45,6 @@ app.get('/', (req, res) => {
 });
 
 // Get video info
-// Get video info
 app.post('/api/info', async (req, res) => {
     try {
         const { url } = req.body;
@@ -61,42 +60,106 @@ app.post('/api/info', async (req, res) => {
             dumpSingleJson: true,
             noWarnings: true,
             noCallHome: true,
-            acodec: format.acodec
-        };
-    }
+            noCheckCertificate: true,
+            preferFreeFormats: true,
+        });
+
+        // Extract available qualities with file sizes
+        const qualityMap = {};
+
+        // Find best audio filesize to add to video-only formats (for accurate size estimation)
+        let bestAudioSize = 0;
+        let bestAudioSizeApprox = 0;
+        if (info.formats) {
+            const audioFormats = info.formats.filter(f => f.vcodec === 'none' && f.acodec !== 'none');
+            if (audioFormats.length > 0) {
+                // Sort by filesize desc to find best audio
+                audioFormats.sort((a, b) => (b.filesize || 0) - (a.filesize || 0));
+                bestAudioSize = audioFormats[0].filesize || 0;
+                bestAudioSizeApprox = audioFormats[0].filesize_approx || 0;
+            }
+        }
+
+        if (info.formats) {
+            info.formats.forEach(format => {
+                // Skip audio-only or video-only formats if they don't help us build a complete file
+                // We want formats that have video. Audio can be merged.
+                if (!format.height || format.vcodec === 'none') return;
+
+                const height = format.height;
+                const resolution = `${height}p`;
+
+                // Check if this format has both video and audio
+                const hasAudio = format.acodec && format.acodec !== 'none';
+                const hasVideo = format.vcodec && format.vcodec !== 'none';
+
+                // Calculate total size
+                let totalSize = format.filesize || 0;
+                let totalSizeApprox = format.filesize_approx || 0;
+
+                // If video-only, add estimated audio size
+                if (!hasAudio && hasVideo) {
+                    if (totalSize > 0) totalSize += bestAudioSize;
+                    if (totalSizeApprox > 0) totalSizeApprox += bestAudioSizeApprox;
+                }
+
+                // We want to find the best representative format for this resolution
+                // Logic:
+                // 1. If we don't have this resolution yet, add it.
+                // 2. If we have it, but the new one has both audio+video and the old one didn't, take the new one.
+                // 3. If both have (or don't have) audio, take the one with larger filesize (likely better quality).
+
+                if (!qualityMap[resolution] ||
+                    (hasAudio && hasVideo && !qualityMap[resolution].hasAudio) ||
+                    (totalSize > (qualityMap[resolution].filesize || 0))) {
+
+                    qualityMap[resolution] = {
+                        resolution: resolution,
+                        height: height,
+                        filesize: totalSize || null,
+                        filesizeApprox: totalSizeApprox || null,
+                        format_id: format.format_id,
+                        ext: format.ext || 'mp4',
+                        hasAudio: hasAudio,
+                        hasVideo: hasVideo,
+                        fps: format.fps,
+                        vcodec: format.vcodec,
+                        acodec: format.acodec
+                    };
+                }
             });
         }
 
-// Convert to array and sort by resolution (highest first)
-const qualities = Object.values(qualityMap)
-    .sort((a, b) => b.height - a.height)
-    .map(q => ({
-        resolution: q.resolution,
-        filesize: q.filesize || q.filesizeApprox || null,
-        filesizeMB: q.filesize ? Math.round(q.filesize / 1024 / 1024) :
-            q.filesizeApprox ? Math.round(q.filesizeApprox / 1024 / 1024) : null,
-        format_id: q.format_id,
-        ext: q.ext,
-        fps: q.fps
-    }));
+        // Convert to array and sort by resolution (highest first)
+        const qualities = Object.values(qualityMap)
+            .sort((a, b) => b.height - a.height)
+            .map(q => ({
+                resolution: q.resolution,
+                filesize: q.filesize || q.filesizeApprox || null,
+                filesizeMB: q.filesize ? Math.round(q.filesize / 1024 / 1024) :
+                    q.filesizeApprox ? Math.round(q.filesizeApprox / 1024 / 1024) : null,
+                format_id: q.format_id,
+                ext: q.ext,
+                fps: q.fps
+            }));
 
-res.json({
-    title: info.title || 'Unknown',
-    duration: info.duration || null,
-    thumbnail: info.thumbnail || null,
-    uploader: info.uploader || null,
-    view_count: info.view_count || null,
-    qualities: qualities,
-    platform: info.extractor || 'unknown'
-});
+        res.json({
+            title: info.title || 'Unknown',
+            duration: info.duration || null,
+            thumbnail: info.thumbnail || null,
+            uploader: info.uploader || null,
+            view_count: info.view_count || null,
+            qualities: qualities,
+            platform: info.extractor || 'unknown'
+        });
 
     } catch (error) {
-    console.error('Error fetching video info:', error);
-    res.status(500).json({
-        error: 'Failed to fetch video information',
-        message: error.message
-    });
-}
+        console.error('Error fetching video info:', error);
+        res.status(500).json({
+            error: 'Failed to fetch video information',
+            message: error.message
+        });
+    }
 });
 
 // Download video
