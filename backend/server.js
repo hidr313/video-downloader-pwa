@@ -18,7 +18,7 @@ function cobaltRequest(url, quality = 'max') {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({
             url: url,
-            vQuality: quality, // max, 2160, 1440, 1080, 720, 480, 360
+            vQuality: quality,
             filenamePattern: 'basic',
             isAudioOnly: false,
             isNoTTWatermark: true,
@@ -33,7 +33,10 @@ function cobaltRequest(url, quality = 'max') {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'Content-Length': data.length
+                'Content-Length': data.length,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Origin': 'https://cobalt.tools',
+                'Referer': 'https://cobalt.tools/'
             }
         };
 
@@ -49,6 +52,7 @@ function cobaltRequest(url, quality = 'max') {
                     const parsed = JSON.parse(responseData);
                     resolve(parsed);
                 } catch (error) {
+                    console.error('Cobalt API Raw Response:', responseData);
                     reject(new Error('Invalid response from Cobalt API'));
                 }
             });
@@ -82,7 +86,10 @@ function cobaltAudioRequest(url) {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'Content-Length': data.length
+                'Content-Length': data.length,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Origin': 'https://cobalt.tools',
+                'Referer': 'https://cobalt.tools/'
             }
         };
 
@@ -98,6 +105,7 @@ function cobaltAudioRequest(url) {
                     const parsed = JSON.parse(responseData);
                     resolve(parsed);
                 } catch (error) {
+                    console.error('Cobalt API Raw Response:', responseData);
                     reject(new Error('Invalid response from Cobalt API'));
                 }
             });
