@@ -1,9 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const ytdlp = require('youtube-dl-exec');
-const fs = require('fs');
-const path = require('path');
-const { promisify } = require('util');
+const https = require('https');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,25 +10,106 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Create temp directory for downloads
-const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR);
+// Cobalt API endpoint
+const COBALT_API = 'https://api.cobalt.tools/api/json';
+
+// Helper function to make API request to Cobalt
+function cobaltRequest(url, quality = 'max') {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify({
+            url: url,
+            vQuality: quality, // max, 2160, 1440, 1080, 720, 480, 360
+            filenamePattern: 'basic',
+            isAudioOnly: false,
+            isNoTTWatermark: true,
+            isTTFullAudio: false,
+            disableMetadata: false
+        });
+
+        const options = {
+            hostname: 'api.cobalt.tools',
+            path: '/api/json',
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let responseData = '';
+
+            res.on('data', (chunk) => {
+                responseData += chunk;
+            });
+
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(responseData);
+                    resolve(parsed);
+                } catch (error) {
+                    reject(new Error('Invalid response from Cobalt API'));
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        req.write(data);
+        req.end();
+    });
 }
 
-// Helper function to generate random filename
-function generateFilename(ext = 'mp4') {
-    return `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
-}
+// Helper function for audio-only request
+function cobaltAudioRequest(url) {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify({
+            url: url,
+            isAudioOnly: true,
+            filenamePattern: 'basic',
+            isNoTTWatermark: true,
+            isTTFullAudio: true,
+            disableMetadata: false
+        });
 
-// Helper function to clean up temp files
-function cleanupFile(filepath) {
-    setTimeout(() => {
-        if (fs.existsSync(filepath)) {
-            fs.unlinkSync(filepath);
-            console.log('Cleaned up:', filepath);
-        }
-    }, 60000); // Delete after 1 minute
+        const options = {
+            hostname: 'api.cobalt.tools',
+            path: '/api/json',
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let responseData = '';
+
+            res.on('data', (chunk) => {
+                responseData += chunk;
+            });
+
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(responseData);
+                    resolve(parsed);
+                } catch (error) {
+                    reject(new Error('Invalid response from Cobalt API'));
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        req.write(data);
+        req.end();
+    });
 }
 
 // API Routes
@@ -40,7 +119,8 @@ app.get('/', (req, res) => {
     res.json({
         status: 'OK',
         message: 'Video Downloader API is running',
-        version: '1.0.0'
+        version: '2.0.0',
+        powered_by: 'Cobalt API'
     });
 });
 
@@ -53,26 +133,11 @@ app.post('/api/info', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        // Get video info without downloading
-        const info = await ytdlp(url, {
-            dumpSingleJson: true,
-            noWarnings: true,
-            noCallHome: true,
-            noCheckCertificate: true,
-            preferFreeFormats: true,
-        });
-
+        // Cobalt doesn't provide info endpoint, so we just validate the URL
         res.json({
-            title: info.title,
-            duration: info.duration,
-            thumbnail: info.thumbnail,
-            formats: info.formats.map(f => ({
-                format_id: f.format_id,
-                ext: f.ext,
-                quality: f.quality,
-                filesize: f.filesize,
-                resolution: f.resolution,
-            })),
+            url: url,
+            supported: true,
+            message: 'URL is ready for download'
         });
 
     } catch (error) {
@@ -87,53 +152,40 @@ app.post('/api/info', async (req, res) => {
 // Download video
 app.post('/api/download', async (req, res) => {
     try {
-        const { url, quality = 'best' } = req.body;
+        const { url, quality = 'max' } = req.body;
 
         if (!url) {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        const filename = generateFilename('mp4');
-        const outputPath = path.join(TEMP_DIR, filename);
+        console.log('Requesting download from Cobalt:', url, 'quality:', quality);
 
-        // Prepare yt-dlp options
-        let formatSelection = 'bestvideo+bestaudio/best';
+        // Map our quality to Cobalt's format
+        let cobaltQuality = quality;
+        if (quality === 'best') cobaltQuality = 'max';
+        else if (quality === '2160') cobaltQuality = '2160';
+        else if (quality === '1080') cobaltQuality = '1080';
+        else if (quality === '720') cobaltQuality = '720';
+        else if (quality === '480') cobaltQuality = '480';
+        else if (quality === '360') cobaltQuality = '360';
+        else cobaltQuality = 'max';
 
-        if (quality !== 'best') {
-            // Format: bestvideo[height<=720]+bestaudio/best[height<=720]
-            formatSelection = `bestvideo[height<=${quality}]+bestaudio/best[height<=${quality}]`;
+        const result = await cobaltRequest(url, cobaltQuality);
+
+        console.log('Cobalt response:', result);
+
+        if (result.status === 'error' || result.status === 'rate-limit') {
+            return res.status(400).json({
+                error: result.text || 'Download failed',
+                message: result.text
+            });
         }
 
-        // Download video
-        await ytdlp(url, {
-            output: outputPath,
-            format: formatSelection,
-            mergeOutputFormat: 'mp4',
-            noWarnings: true,
-            noCallHome: true,
-            noCheckCertificate: true,
-            addMetadata: true,
-        });
-
-        // Check if file exists
-        if (!fs.existsSync(outputPath)) {
-            throw new Error('Download failed - file not created');
-        }
-
-        // Get file stats
-        const stats = fs.statSync(outputPath);
-
-        // Send file
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Content-Disposition', `attachment; filename="video_${quality}.mp4"`);
-        res.setHeader('Content-Length', stats.size);
-
-        const fileStream = fs.createReadStream(outputPath);
-        fileStream.pipe(res);
-
-        // Cleanup after sending
-        fileStream.on('end', () => {
-            cleanupFile(outputPath);
+        // Return the download URL from Cobalt
+        res.json({
+            status: 'success',
+            url: result.url,
+            filename: result.filename || 'video.mp4'
         });
 
     } catch (error) {
@@ -154,41 +206,24 @@ app.post('/api/audio', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        const filename = generateFilename('mp3');
-        const outputPath = path.join(TEMP_DIR, filename);
+        console.log('Requesting audio from Cobalt:', url);
 
-        // Download audio only
-        await ytdlp(url, {
-            output: outputPath,
-            extractAudio: true,
-            audioFormat: 'mp3',
-            audioQuality: 0, // Best quality
-            noWarnings: true,
-            noCallHome: true,
-            noCheckCertificate: true,
-            addMetadata: true,
-            embedThumbnail: true,
-        });
+        const result = await cobaltAudioRequest(url);
 
-        // Check if file exists
-        if (!fs.existsSync(outputPath)) {
-            throw new Error('Download failed - file not created');
+        console.log('Cobalt audio response:', result);
+
+        if (result.status === 'error' || result.status === 'rate-limit') {
+            return res.status(400).json({
+                error: result.text || 'Audio download failed',
+                message: result.text
+            });
         }
 
-        // Get file stats
-        const stats = fs.statSync(outputPath);
-
-        // Send file
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Disposition', `attachment; filename="audio.mp3"`);
-        res.setHeader('Content-Length', stats.size);
-
-        const fileStream = fs.createReadStream(outputPath);
-        fileStream.pipe(res);
-
-        // Cleanup after sending
-        fileStream.on('end', () => {
-            cleanupFile(outputPath);
+        // Return the download URL from Cobalt
+        res.json({
+            status: 'success',
+            url: result.url,
+            filename: result.filename || 'audio.mp3'
         });
 
     } catch (error) {
@@ -213,4 +248,5 @@ app.use((error, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📥 Video Downloader API ready`);
+    console.log(`⚡ Powered by Cobalt API - No Python required!`);
 });
