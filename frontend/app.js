@@ -3,48 +3,215 @@ const API_BASE_URL = 'https://lessdowcgreater-production.up.railway.app/api'; //
 
 // Elements
 const urlInput = document.getElementById('videoUrl');
-const pasteBtn = document.getElementById('pasteBtn');
 const qualitySelect = document.getElementById('quality');
 const audioOnlyCheckbox = document.getElementById('audioOnly');
 const downloadBtn = document.getElementById('downloadBtn');
+const messageDiv = document.getElementById('message');
+const pasteBtn = document.getElementById('pasteBtn');
+const videoInfoCard = document.getElementById('videoInfo');
+const qualitiesContainer = document.getElementById('qualitiesContainer');
 const loadingState = document.getElementById('loadingState');
 const errorMessage = document.getElementById('errorMessage');
 const errorText = document.getElementById('errorText');
 const successMessage = document.getElementById('successMessage');
 
-// Check if shared URL exists (from share target)
-window.addEventListener('DOMContentLoaded', async () => {
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-        try {
-            await navigator.serviceWorker.register('service-worker.js');
-            console.log('Service Worker registered successfully');
-        } catch (error) {
-            console.error('Service Worker registration failed:', error);
+let currentVideoInfo = null;
+let selectedQualityFormat = null;
+
+// Helper: Check if URL is YouTube
+function isYouTubeURL(url) {
+    return url && (url.includes('youtube.com') || url.includes('youtu.be'));
+}
+
+// Helper: Format file size
+function formatFileSize(bytes) {
+    if (!bytes) return 'حجم غير معروف';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return Math.round(bytes / 1024 / 1024) + ' MB';
+}
+
+// Show message
+function showMessage(text, type = 'info') {
+    // Legacy support if messageDiv exists
+    if (messageDiv) {
+        messageDiv.textContent = text;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+    }
+}
+
+// Hide message
+function hideMessage() {
+    if (messageDiv) messageDiv.style.display = 'none';
+}
+
+// UI Helper Functions
+function setLoading(loading) {
+    downloadBtn.disabled = loading;
+    if (loading) {
+        if (loadingState) loadingState.classList.remove('hidden');
+    } else {
+        if (loadingState) loadingState.classList.add('hidden');
+    }
+}
+
+function showError(message) {
+    if (errorText) errorText.textContent = message;
+    if (errorMessage) {
+        errorMessage.classList.remove('hidden');
+        setTimeout(() => {
+            errorMessage.classList.add('hidden');
+        }, 5000);
+    } else {
+        alert(message);
+    }
+}
+
+function showSuccess() {
+    if (successMessage) {
+        successMessage.classList.remove('hidden');
+        setTimeout(() => {
+            successMessage.classList.add('hidden');
+        }, 3000);
+    } else {
+        alert('تم التحميل بنجاح!');
+    }
+}
+
+function hideMessages() {
+    if (errorMessage) errorMessage.classList.add('hidden');
+    if (successMessage) successMessage.classList.add('hidden');
+}
+
+// Fetch video info
+async function fetchVideoInfo(url) {
+    try {
+        setLoading(true);
+
+        const response = await fetch(`${API_BASE_URL}/info`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'فشل جلب المعلومات');
+        }
+
+        currentVideoInfo = data;
+        displayVideoInfo(data);
+
+    } catch (error) {
+        console.error('Error fetching info:', error);
+        // Don't show error immediately for auto-fetch, just fallback to manual
+        hideVideoInfo();
+    } finally {
+        setLoading(false);
+    }
+}
+
+// Display video info
+function displayVideoInfo(info) {
+    // Set thumbnail
+    const thumb = document.getElementById('videoThumbnail');
+    if (thumb) thumb.src = info.thumbnail || '';
+
+    const title = document.getElementById('videoTitle');
+    if (title) title.textContent = info.title || 'فيديو بدون عنوان';
+
+    // Set duration
+    const duration = document.getElementById('videoDuration');
+    if (duration) {
+        if (info.duration) {
+            const minutes = Math.floor(info.duration / 60);
+            const seconds = info.duration % 60;
+            duration.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+            duration.textContent = '--:--';
         }
     }
 
-    // Check for shared URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedUrl = urlParams.get('url');
+    // Display qualities
+    if (qualitiesContainer && info.qualities && info.qualities.length > 0) {
+        qualitiesContainer.innerHTML = info.qualities.map(q => `
+            <div class="quality-option" data-resolution="${q.resolution}" data-format="${q.format_id}">
+                <div class="quality-badge">${q.resolution}</div>
+                <div class="quality-size">${q.filesizeMB ? `~${q.filesizeMB} MB` : 'حجم غير معروف'}</div>
+                <div class="quality-check">✓</div>
+            </div>
+        `).join('');
 
-    if (sharedUrl) {
-        urlInput.value = sharedUrl;
-        // Clear URL parameter
-        window.history.replaceState({}, document.title, window.location.pathname);
+        // Add click handlers
+        document.querySelectorAll('.quality-option').forEach(option => {
+            option.addEventListener('click', function () {
+                document.querySelectorAll('.quality-option').forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedQualityFormat = this.dataset.resolution.replace('p', '');
+            });
+        });
+
+        // Select first quality by default
+        const firstOption = qualitiesContainer.querySelector('.quality-option');
+        if (firstOption) {
+            firstOption.click();
+        }
+
+        // Hide standard quality selector for YouTube
+        if (qualitySelect) qualitySelect.parentElement.style.display = 'none';
+    } else {
+        if (qualitiesContainer) qualitiesContainer.innerHTML = '<p style="text-align: center; color: #999;">لا توجد جودات متاحة</p>';
+        if (qualitySelect) qualitySelect.parentElement.style.display = 'block';
+    }
+
+    // Show the info card
+    if (videoInfoCard) videoInfoCard.style.display = 'block';
+}
+
+// Hide video info
+function hideVideoInfo() {
+    if (videoInfoCard) videoInfoCard.style.display = 'none';
+    if (qualitySelect) qualitySelect.parentElement.style.display = 'block';
+    currentVideoInfo = null;
+    selectedQualityFormat = null;
+}
+
+// Handle URL input change
+let debounceTimer;
+urlInput.addEventListener('input', function () {
+    const url = this.value.trim();
+
+    clearTimeout(debounceTimer);
+
+    if (isYouTubeURL(url)) {
+        // Auto-fetch info for YouTube URLs with debounce
+        debounceTimer = setTimeout(() => {
+            fetchVideoInfo(url);
+        }, 500);
+    } else if (url) {
+        // For non-YouTube, hide info and show standard selector
+        hideVideoInfo();
+    } else {
+        hideVideoInfo();
     }
 });
 
-// Paste button handler
-pasteBtn.addEventListener('click', async () => {
-    try {
-        const text = await navigator.clipboard.readText();
-        urlInput.value = text;
-        hideMessages();
-    } catch (error) {
-        showError('لا يمكن الوصول للحافظة');
-    }
-});
+// Handle paste button
+if (pasteBtn) {
+    pasteBtn.addEventListener('click', async function () {
+        try {
+            const text = await navigator.clipboard.readText();
+            urlInput.value = text;
+            urlInput.dispatchEvent(new Event('input'));
+        } catch (error) {
+            showError('❌ فشل اللصق من الحافظة');
+        }
+    });
+}
 
 // Download button handler
 downloadBtn.addEventListener('click', async () => {
@@ -55,17 +222,19 @@ downloadBtn.addEventListener('click', async () => {
         return;
     }
 
-    if (!isValidUrl(url)) {
-        showError('الرابط غير صالح');
-        return;
-    }
-
     hideMessages();
     setLoading(true);
 
     try {
-        const quality = qualitySelect.value;
         const audioOnly = audioOnlyCheckbox.checked;
+
+        // Determine quality: either from selected card (YouTube) or dropdown (Others)
+        let quality = 'best';
+        if (selectedQualityFormat && !audioOnly) {
+            quality = selectedQualityFormat;
+        } else if (qualitySelect) {
+            quality = qualitySelect.value;
+        }
 
         if (audioOnly) {
             await downloadAudio(url);
@@ -160,47 +329,33 @@ function downloadBlob(blob, filename) {
     document.body.removeChild(a);
 }
 
-// Validate URL
-function isValidUrl(string) {
-    try {
-        new URL(string);
-        return true;
-    } catch (_) {
-        return false;
+// Check for shared URL
+window.addEventListener('DOMContentLoaded', async () => {
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+        try {
+            await navigator.serviceWorker.register('service-worker.js');
+        } catch (error) {
+            console.error('Service Worker registration failed:', error);
+        }
     }
-}
 
-// UI Helper Functions
-function setLoading(loading) {
-    downloadBtn.disabled = loading;
-    if (loading) {
-        loadingState.classList.remove('hidden');
-    } else {
-        loadingState.classList.add('hidden');
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedUrl = urlParams.get('url');
+    if (sharedUrl) {
+        urlInput.value = sharedUrl;
+        urlInput.dispatchEvent(new Event('input'));
+        // Clear URL parameter
+        window.history.replaceState({}, document.title, window.location.pathname);
     }
-}
-
-function showError(message) {
-    errorText.textContent = message;
-    errorMessage.classList.remove('hidden');
-    setTimeout(() => {
-        errorMessage.classList.add('hidden');
-    }, 5000);
-}
-
-function showSuccess() {
-    successMessage.classList.remove('hidden');
-    setTimeout(() => {
-        successMessage.classList.add('hidden');
-    }, 3000);
-}
-
-function hideMessages() {
-    errorMessage.classList.add('hidden');
-    successMessage.classList.add('hidden');
-}
+});
 
 // Disable quality select when audio-only is checked
 audioOnlyCheckbox.addEventListener('change', (e) => {
-    qualitySelect.disabled = e.target.checked;
+    if (qualitySelect) qualitySelect.disabled = e.target.checked;
+    // Also disable quality cards opacity
+    if (qualitiesContainer) {
+        qualitiesContainer.style.opacity = e.target.checked ? '0.5' : '1';
+        qualitiesContainer.style.pointerEvents = e.target.checked ? 'none' : 'auto';
+    }
 });

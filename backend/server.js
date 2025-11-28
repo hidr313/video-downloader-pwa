@@ -45,6 +45,7 @@ app.get('/', (req, res) => {
 });
 
 // Get video info
+// Get video info
 app.post('/api/info', async (req, res) => {
     try {
         const { url } = req.body;
@@ -52,6 +53,8 @@ app.post('/api/info', async (req, res) => {
         if (!url) {
             return res.status(400).json({ error: 'URL is required' });
         }
+
+        console.log('Fetching info for:', url);
 
         // Get video info without downloading
         const info = await ytdlp(url, {
@@ -62,17 +65,70 @@ app.post('/api/info', async (req, res) => {
             preferFreeFormats: true,
         });
 
+        // Extract available qualities with file sizes
+        const qualityMap = {};
+
+        if (info.formats) {
+            info.formats.forEach(format => {
+                // Skip audio-only or video-only formats if they don't help us build a complete file
+                // We want formats that have video. Audio can be merged.
+                if (!format.height || format.vcodec === 'none') return;
+
+                const height = format.height;
+                const resolution = `${height}p`;
+
+                // Check if this format has both video and audio
+                const hasAudio = format.acodec && format.acodec !== 'none';
+                const hasVideo = format.vcodec && format.vcodec !== 'none';
+
+                // We want to find the best representative format for this resolution
+                // Logic:
+                // 1. If we don't have this resolution yet, add it.
+                // 2. If we have it, but the new one has both audio+video and the old one didn't, take the new one.
+                // 3. If both have (or don't have) audio, take the one with larger filesize (likely better quality).
+
+                if (!qualityMap[resolution] ||
+                    (hasAudio && hasVideo && !qualityMap[resolution].hasAudio) ||
+                    (format.filesize && format.filesize > (qualityMap[resolution].filesize || 0))) {
+
+                    qualityMap[resolution] = {
+                        resolution: resolution,
+                        height: height,
+                        filesize: format.filesize || null,
+                        filesizeApprox: format.filesize_approx || null,
+                        format_id: format.format_id,
+                        ext: format.ext || 'mp4',
+                        hasAudio: hasAudio,
+                        hasVideo: hasVideo,
+                        fps: format.fps,
+                        vcodec: format.vcodec,
+                        acodec: format.acodec
+                    };
+                }
+            });
+        }
+
+        // Convert to array and sort by resolution (highest first)
+        const qualities = Object.values(qualityMap)
+            .sort((a, b) => b.height - a.height)
+            .map(q => ({
+                resolution: q.resolution,
+                filesize: q.filesize || q.filesizeApprox || null,
+                filesizeMB: q.filesize ? Math.round(q.filesize / 1024 / 1024) :
+                    q.filesizeApprox ? Math.round(q.filesizeApprox / 1024 / 1024) : null,
+                format_id: q.format_id,
+                ext: q.ext,
+                fps: q.fps
+            }));
+
         res.json({
-            title: info.title,
-            duration: info.duration,
-            thumbnail: info.thumbnail,
-            formats: info.formats ? info.formats.map(f => ({
-                format_id: f.format_id,
-                ext: f.ext,
-                quality: f.quality,
-                filesize: f.filesize,
-                resolution: f.resolution,
-            })) : [],
+            title: info.title || 'Unknown',
+            duration: info.duration || null,
+            thumbnail: info.thumbnail || null,
+            uploader: info.uploader || null,
+            view_count: info.view_count || null,
+            qualities: qualities,
+            platform: info.extractor || 'unknown'
         });
 
     } catch (error) {
