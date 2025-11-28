@@ -71,9 +71,9 @@ function showProgress(show) {
     }
 }
 
-function updateProgress(percent) {
+function updateProgress(percent, text = null) {
     progressFill.style.width = `${percent}%`;
-    progressText.textContent = `${Math.round(percent)}%`;
+    progressText.textContent = text ? text : `${Math.round(percent)}%`;
 }
 
 function showSuccessActions() {
@@ -259,6 +259,8 @@ downloadBtn.addEventListener('click', async () => {
     hideMessages();
     setLoading(true);
     showProgress(true); // Show progress bar
+    updateProgress(0, 'جاري المعالجة في السيرفر...'); // Initial state
+
 
     try {
         const audioOnly = audioOnlyCheckbox.checked;
@@ -301,6 +303,10 @@ async function downloadFile(endpoint, body) {
         const error = await response.json();
         throw new Error(error.message || 'فشل التحميل');
     }
+
+    // Update progress to show downloading started
+    updateProgress(0, 'جاري التنزيل...');
+
 
     // Get content length for progress
     const contentLength = +response.headers.get('Content-Length');
@@ -371,8 +377,22 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     const urlParams = new URLSearchParams(window.location.search);
     const sharedUrl = urlParams.get('url');
-    if (sharedUrl) {
-        urlInput.value = sharedUrl;
+    const sharedText = urlParams.get('text');
+    const sharedTitle = urlParams.get('title');
+
+    let finalUrl = sharedUrl;
+
+    // If no direct URL, try to extract from text or title
+    if (!finalUrl && (sharedText || sharedTitle)) {
+        const textToSearch = (sharedText || '') + ' ' + (sharedTitle || '');
+        const urlMatch = textToSearch.match(/(https?:\/\/[^\s]+)/);
+        if (urlMatch) {
+            finalUrl = urlMatch[0];
+        }
+    }
+
+    if (finalUrl) {
+        urlInput.value = finalUrl;
         urlInput.dispatchEvent(new Event('input'));
         // Clear URL parameter
         window.history.replaceState({}, document.title, window.location.pathname);
