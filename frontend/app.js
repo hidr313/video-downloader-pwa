@@ -258,201 +258,6 @@ downloadBtn.addEventListener('click', async () => {
 
     hideMessages();
     setLoading(true);
-    showProgress(true); // Show progress bar
-
-    try {
-        const audioOnly = audioOnlyCheckbox.checked;
-
-        // Determine quality
-        let quality = 'best';
-        if (selectedQualityFormat && !audioOnly) {
-            quality = selectedQualityFormat;
-        } else if (qualitySelect) {
-            quality = qualitySelect.value;
-        }
-
-        if (audioOnly) {
-            await downloadFile(`${API_BASE_URL}/audio`, { url });
-        } else {
-            await downloadFile(`${API_BASE_URL}/download`, { url, quality });
-        }
-
-        showSuccess();
-        showSuccessActions(); // Show "Download Another" button
-    } catch (error) {
-        showError(error.message || 'حدث خطأ أثناء التحميل');
-        showProgress(false); // Hide progress on error
-    } finally {
-        setLoading(false);
-    }
-});
-
-// Generic download function with progress
-async function downloadFile(endpoint, body) {
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'فشل التحميل');
-    }
-
-    // Get content length for progress
-    const contentLength = +response.headers.get('Content-Length');
-
-    // Get filename
-    const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = 'download.mp4';
-    if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\\n]*=((['"]).*?\\2|[^;\\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-            filename = filenameMatch[1].replace(/['\\"]/g, '');
-        }
-    } else if (body.quality) {
-        filename = `video_${body.quality}.mp4`;
-    } else {
-        filename = 'audio.mp3';
-    }
-
-    // Read stream
-    const reader = response.body.getReader();
-    let receivedLength = 0;
-    const chunks = [];
-
-    // For simulated progress when content length is unknown
-    let simulatedProgress = 0;
-    let progressInterval = null;
-
-    // If no content length, use simulated progress
-    if (!contentLength) {
-        progressInterval = setInterval(() => {
-            if (simulatedProgress < 90) {
-                simulatedProgress += Math.random() * 10;
-                updateProgress(Math.min(simulatedProgress, 90));
-            }
-        }, 500);
-    }
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        chunks.push(value);
-        receivedLength += value.length;
-
-        if (contentLength) {
-            const percent = (receivedLength / contentLength) * 100;
-            updateProgress(percent);
-        }
-    }
-
-    // Clear simulated progress
-    if (progressInterval) {
-        clearInterval(progressInterval);
-    }
-
-    // Create blob and download
-    const blob = new Blob(chunks);
-    downloadBlob(blob, filename);
-
-    // Complete progress
-    updateProgress(100);
-}
-
-// Helper function to download blob
-function downloadBlob(blob, filename) {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-}
-
-// Check for shared URL
-document.querySelectorAll('.quality-option').forEach(o => o.classList.remove('selected'));
-this.classList.add('selected');
-selectedQualityFormat = this.dataset.resolution.replace('p', '');
-            });
-        });
-
-// Select first quality by default
-const firstOption = qualitiesContainer.querySelector('.quality-option');
-if (firstOption) {
-    firstOption.click();
-}
-
-// Hide standard quality selector for YouTube
-if (qualitySelect) qualitySelect.parentElement.style.display = 'none';
-    } else {
-    if (qualitiesContainer) qualitiesContainer.innerHTML = '<p style="text-align: center; color: #999;">لا توجد جودات متاحة</p>';
-    if (qualitySelect) qualitySelect.parentElement.style.display = 'block';
-}
-
-// Show the info card
-if (videoInfoCard) videoInfoCard.style.display = 'block';
-}
-
-// Hide video info
-function hideVideoInfo() {
-    if (videoInfoCard) videoInfoCard.style.display = 'none';
-    if (qualitySelect) qualitySelect.parentElement.style.display = 'block';
-    currentVideoInfo = null;
-    selectedQualityFormat = null;
-}
-
-// Handle URL input change
-let debounceTimer;
-urlInput.addEventListener('input', function () {
-    const url = this.value.trim();
-
-    clearTimeout(debounceTimer);
-
-    if (isYouTubeURL(url)) {
-        // Auto-fetch info for YouTube URLs with debounce
-        debounceTimer = setTimeout(() => {
-            fetchVideoInfo(url);
-        }, 500);
-    } else if (url) {
-        // For non-YouTube, hide info and show standard selector
-        hideVideoInfo();
-    } else {
-        hideVideoInfo();
-    }
-});
-
-// Handle paste button
-if (pasteBtn) {
-    pasteBtn.addEventListener('click', async function () {
-        try {
-            const text = await navigator.clipboard.readText();
-            urlInput.value = text;
-            urlInput.dispatchEvent(new Event('input'));
-        } catch (error) {
-            showError('❌ فشل اللصق من الحافظة');
-        }
-    });
-}
-
-// Download button handler
-downloadBtn.addEventListener('click', async () => {
-    const url = urlInput.value.trim();
-
-    if (!url) {
-        showError('الرجاء إدخال رابط الفيديو');
-        return;
-    }
-
-    hideMessages();
-    setLoading(true);
 
     // For YouTube, we keep the in-app progress bar because we need to select quality
     // For others, we want "Native Download" experience
@@ -521,13 +326,11 @@ async function downloadVideo(url, quality, useNative = false) {
     const endpoint = `${API_BASE_URL}/download`;
 
     if (useNative) {
-        // Native Download: Create a form and submit it to trigger browser download manager
-        // This gives the native notification bar experience
+        // Native Download: Trigger native behavior via notification + fetch
         triggerNativeDownload(endpoint, { url, quality });
         return;
     }
 
-    // ... existing fetch logic for YouTube ...
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -551,31 +354,12 @@ async function downloadVideo(url, quality, useNative = false) {
     let receivedLength = 0;
     const chunks = [];
 
-    // For simulated progress when content length is unknown
-    let simulatedProgress = 0;
-    let progressInterval = null;
-
-    // If no content length, use simulated progress
-    if (!contentLength) {
-        progressInterval = setInterval(() => {
-            if (simulatedProgress < 90) {
-                simulatedProgress += Math.random() * 10;
-                updateProgress(Math.min(simulatedProgress, 90));
-            }
-        }, 500);
-    }
-
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         receivedLength += value.length;
         if (contentLength) updateProgress((receivedLength / contentLength) * 100);
-    }
-
-    // Clear simulated progress
-    if (progressInterval) {
-        clearInterval(progressInterval);
     }
 
     const blob = new Blob(chunks);
@@ -592,7 +376,6 @@ async function downloadAudio(url, useNative = false) {
         return;
     }
 
-    // ... existing fetch logic ...
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -609,31 +392,12 @@ async function downloadAudio(url, useNative = false) {
     let receivedLength = 0;
     const chunks = [];
 
-    // For simulated progress when content length is unknown
-    let simulatedProgress = 0;
-    let progressInterval = null;
-
-    // If no content length, use simulated progress
-    if (!contentLength) {
-        progressInterval = setInterval(() => {
-            if (simulatedProgress < 90) {
-                simulatedProgress += Math.random() * 10;
-                updateProgress(Math.min(simulatedProgress, 90));
-            }
-        }, 500);
-    }
-
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         receivedLength += value.length;
         if (contentLength) updateProgress((receivedLength / contentLength) * 100);
-    }
-
-    // Clear simulated progress
-    if (progressInterval) {
-        clearInterval(progressInterval);
     }
 
     const blob = new Blob(chunks);
@@ -643,33 +407,7 @@ async function downloadAudio(url, useNative = false) {
 
 // Helper to trigger native browser download
 function triggerNativeDownload(endpoint, data) {
-    // We can't easily trigger native POST JSON download.
-    // So we will use the existing fetch-blob method BUT we will try to simulate native behavior
-    // OR we modify backend to accept GET parameters for downloads.
-
-    // Let's stick to the fetch method but add a Notification.
-    // Since the user insists on "Native Notification Bar", the ONLY way is if the BROWSER handles the request.
-    // Browsers handle GET requests natively easily. POST is harder.
-
-    // Let's try a workaround: Use XMLHttpRequest with responseType 'blob' and monitor progress, 
-    // then save. It's what we have.
-    // The "Native Download Manager" usually only kicks in for direct navigation.
-
-    // FALLBACK: We will continue using our in-app downloader but we will fire a System Notification.
-
-    // Wait! If we want native download manager, we should probably change backend to support GET for downloads?
-    // No, that's insecure for long URLs.
-
-    // Let's use the fetch method but ensure we show a notification.
-
-    // REVERTING to fetch but with Auto-Reset.
-    // The user said "I want to see the download bar IN THE PHONE NOT THE BROWSER".
-    // This is only possible if we navigate `window.location` to the file.
-    // But we are generating the file on the fly.
-
-    // OK, I will implement the fetch-download, but I will send a "Downloading..." notification
-    // using the Notification API which appears in the system tray.
-
+    // Notify user that download is starting in background
     if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('جاري التحميل...', {
             body: 'يتم الآن تحميل الملف في الخلفية',
