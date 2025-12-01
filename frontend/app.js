@@ -71,9 +71,9 @@ function showProgress(show) {
     }
 }
 
-function updateProgress(percent, text = null) {
+function updateProgress(percent) {
     progressFill.style.width = `${percent}%`;
-    progressText.textContent = text ? text : `${Math.round(percent)}%`;
+    progressText.textContent = `${Math.round(percent)}%`;
 }
 
 function showSuccessActions() {
@@ -259,8 +259,6 @@ downloadBtn.addEventListener('click', async () => {
     hideMessages();
     setLoading(true);
     showProgress(true); // Show progress bar
-    updateProgress(0, 'جاري المعالجة في السيرفر...'); // Initial state
-
 
     try {
         const audioOnly = audioOnlyCheckbox.checked;
@@ -304,10 +302,6 @@ async function downloadFile(endpoint, body) {
         throw new Error(error.message || 'فشل التحميل');
     }
 
-    // Update progress to show downloading started
-    updateProgress(0, 'جاري التنزيل...');
-
-
     // Get content length for progress
     const contentLength = +response.headers.get('Content-Length');
 
@@ -315,9 +309,9 @@ async function downloadFile(endpoint, body) {
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename = 'download.mp4';
     if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        const filenameMatch = contentDisposition.match(/filename[^;=\\n]*=((['"]).*?\\2|[^;\\n]*)/);
         if (filenameMatch && filenameMatch[1]) {
-            filename = filenameMatch[1].replace(/['"]/g, '');
+            filename = filenameMatch[1].replace(/['\\"]/g, '');
         }
     } else if (body.quality) {
         filename = `video_${body.quality}.mp4`;
@@ -330,6 +324,20 @@ async function downloadFile(endpoint, body) {
     let receivedLength = 0;
     const chunks = [];
 
+    // For simulated progress when content length is unknown
+    let simulatedProgress = 0;
+    let progressInterval = null;
+
+    // If no content length, use simulated progress
+    if (!contentLength) {
+        progressInterval = setInterval(() => {
+            if (simulatedProgress < 90) {
+                simulatedProgress += Math.random() * 10;
+                updateProgress(Math.min(simulatedProgress, 90));
+            }
+        }, 500);
+    }
+
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -341,6 +349,11 @@ async function downloadFile(endpoint, body) {
             const percent = (receivedLength / contentLength) * 100;
             updateProgress(percent);
         }
+    }
+
+    // Clear simulated progress
+    if (progressInterval) {
+        clearInterval(progressInterval);
     }
 
     // Create blob and download
@@ -370,34 +383,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     if ('serviceWorker' in navigator) {
         try {
             await navigator.serviceWorker.register('service-worker.js');
-        } catch (error) {
-            console.error('Service Worker registration failed:', error);
-        }
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedUrl = urlParams.get('url');
-    const sharedText = urlParams.get('text');
-    const sharedTitle = urlParams.get('title');
-
-    let finalUrl = sharedUrl;
-
-    // If no direct URL, try to extract from text or title
-    if (!finalUrl && (sharedText || sharedTitle)) {
-        const textToSearch = (sharedText || '') + ' ' + (sharedTitle || '');
-        const urlMatch = textToSearch.match(/(https?:\/\/[^\s]+)/);
-        if (urlMatch) {
-            finalUrl = urlMatch[0];
-        }
-    }
-
-    if (finalUrl) {
-        urlInput.value = finalUrl;
-        urlInput.dispatchEvent(new Event('input'));
-        // Clear URL parameter
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-});
+            if (sharedUrl) {
+                urlInput.value = sharedUrl;
+                urlInput.dispatchEvent(new Event('input'));
+                // Clear URL parameters
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        });
 
 // Disable quality select when audio-only is checked
 audioOnlyCheckbox.addEventListener('change', (e) => {
