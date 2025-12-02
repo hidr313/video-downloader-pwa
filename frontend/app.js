@@ -332,22 +332,54 @@ async function downloadVideo(url, quality, useNative = false) {
 
     const contentLength = +response.headers.get('Content-Length');
     const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = 'video.mp4';
+
+    // استخدام الاسم الحقيقي من السيرفر + timestamp لتجنب التكرار
+    const timestamp = Date.now();
+    let filename = `video_${timestamp}.mp4`;
+
     if (contentDisposition) {
         const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match) filename = match[1];
+        if (match) {
+            const originalName = match[1];
+            // إضافة timestamp قبل الامتداد
+            const ext = originalName.split('.').pop();
+            const baseName = originalName.replace(/\.[^/.]+$/, "");
+            filename = `${baseName}_${timestamp}.${ext}`;
+        }
     }
 
     const reader = response.body.getReader();
     let receivedLength = 0;
     const chunks = [];
 
+    // شريط تقدم وهمي إذا لم يكن Content-Length متاحاً
+    let simulatedProgress = 0;
+    let progressInterval = null;
+
+    if (!contentLength || contentLength === 0) {
+        console.log('Using simulated progress');
+        progressInterval = setInterval(() => {
+            if (simulatedProgress < 90) {
+                simulatedProgress += Math.random() * 5 + 2;
+                updateProgress(Math.min(simulatedProgress, 90));
+            }
+        }, 300);
+    }
+
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         receivedLength += value.length;
-        if (contentLength) updateProgress((receivedLength / contentLength) * 100);
+
+        if (contentLength && contentLength > 0) {
+            const percent = (receivedLength / contentLength) * 100;
+            updateProgress(percent);
+        }
+    }
+
+    if (progressInterval) {
+        clearInterval(progressInterval);
     }
 
     const blob = new Blob(chunks);
@@ -371,6 +403,57 @@ async function downloadAudio(url, useNative = false) {
     });
 
     if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'فشل تحميل الصوت');
+    }
+
+    const contentLength = +response.headers.get('Content-Length');
+
+    // اسم فريد لكل ملف صوتي
+    const timestamp = Date.now();
+    const filename = `audio_${timestamp}.mp3`;
+
+    const reader = response.body.getReader();
+    let receivedLength = 0;
+    const chunks = [];
+
+    // شريط تقدم وهمي
+    let simulatedProgress = 0;
+    let progressInterval = null;
+
+    if (!contentLength || contentLength === 0) {
+        progressInterval = setInterval(() => {
+            if (simulatedProgress < 90) {
+                simulatedProgress += Math.random() * 5 + 2;
+                updateProgress(Math.min(simulatedProgress, 90));
+            }
+        }, 300);
+    }
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedLength += value.length;
+
+        if (contentLength && contentLength > 0) {
+            const percent = (receivedLength / contentLength) * 100;
+            updateProgress(percent);
+        }
+    }
+
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+
+    const blob = new Blob(chunks);
+    downloadBlob(blob, filename);
+    updateProgress(100);
+}
+
+// Helper to trigger native browser download
+async function triggerNativeDownload(endpoint, data) {
+    if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
         try {
             const registration = await navigator.serviceWorker.ready;
             registration.showNotification('جاري التحميل...', {
