@@ -206,9 +206,10 @@ app.post('/api/download', async (req, res) => {
         // Get file stats
         const stats = fs.statSync(outputPath);
 
-        // Send file
+        // Send file with unique timestamp
+        const timestamp = Date.now();
         res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Content-Disposition', `attachment; filename="video_${quality}.mp4"`);
+        res.setHeader('Content-Disposition', `attachment; filename="video_${quality}_${timestamp}.mp4"`);
         res.setHeader('Content-Length', stats.size);
 
         const fileStream = fs.createReadStream(outputPath);
@@ -268,9 +269,10 @@ app.post('/api/audio', async (req, res) => {
         // Get file stats
         const stats = fs.statSync(outputPath);
 
-        // Send file
+        // Send file with unique timestamp
+        const timestamp = Date.now();
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Disposition', `attachment; filename="audio.mp3"`);
+        res.setHeader('Content-Disposition', `attachment; filename="audio_${timestamp}.mp3"`);
         res.setHeader('Content-Length', stats.size);
 
         const fileStream = fs.createReadStream(outputPath);
