@@ -38,7 +38,6 @@ function formatFileSize(bytes) {
 
 // Show message
 function showMessage(text, type = 'info') {
-    // Legacy support if messageDiv exists
     if (messageDiv) {
         messageDiv.textContent = text;
         messageDiv.className = `message ${type}`;
@@ -78,7 +77,6 @@ function updateProgress(percent) {
 
 function showSuccessActions() {
     successActions.classList.remove('hidden');
-    // Hide download button to prevent confusion
     downloadBtn.parentElement.style.display = 'none';
 }
 
@@ -113,7 +111,6 @@ function hideMessages() {
 // Reload button handler
 if (reloadBtn) {
     reloadBtn.addEventListener('click', () => {
-        // Force reload from server to clear state
         window.location.reload(true);
     });
 }
@@ -142,7 +139,6 @@ async function fetchVideoInfo(url) {
 
     } catch (error) {
         console.error('Error fetching info:', error);
-        // Don't show error immediately for auto-fetch, just fallback to manual
         hideVideoInfo();
     } finally {
         setLoading(false);
@@ -151,14 +147,12 @@ async function fetchVideoInfo(url) {
 
 // Display video info
 function displayVideoInfo(info) {
-    // Set thumbnail
     const thumb = document.getElementById('videoThumbnail');
     if (thumb) thumb.src = info.thumbnail || '';
 
     const title = document.getElementById('videoTitle');
     if (title) title.textContent = info.title || 'فيديو بدون عنوان';
 
-    // Set duration
     const duration = document.getElementById('videoDuration');
     if (duration) {
         if (info.duration) {
@@ -170,7 +164,6 @@ function displayVideoInfo(info) {
         }
     }
 
-    // Display qualities
     if (qualitiesContainer && info.qualities && info.qualities.length > 0) {
         qualitiesContainer.innerHTML = info.qualities.map(q => `
             <div class="quality-option" data-resolution="${q.resolution}" data-format="${q.format_id}">
@@ -180,7 +173,6 @@ function displayVideoInfo(info) {
             </div>
         `).join('');
 
-        // Add click handlers
         document.querySelectorAll('.quality-option').forEach(option => {
             option.addEventListener('click', function () {
                 document.querySelectorAll('.quality-option').forEach(o => o.classList.remove('selected'));
@@ -189,20 +181,17 @@ function displayVideoInfo(info) {
             });
         });
 
-        // Select first quality by default
         const firstOption = qualitiesContainer.querySelector('.quality-option');
         if (firstOption) {
             firstOption.click();
         }
 
-        // Hide standard quality selector for YouTube
         if (qualitySelect) qualitySelect.parentElement.style.display = 'none';
     } else {
         if (qualitiesContainer) qualitiesContainer.innerHTML = '<p style="text-align: center; color: #999;">لا توجد جودات متاحة</p>';
         if (qualitySelect) qualitySelect.parentElement.style.display = 'block';
     }
 
-    // Show the info card
     if (videoInfoCard) videoInfoCard.style.display = 'block';
 }
 
@@ -222,12 +211,10 @@ urlInput.addEventListener('input', function () {
     clearTimeout(debounceTimer);
 
     if (isYouTubeURL(url)) {
-        // Auto-fetch info for YouTube URLs with debounce
         debounceTimer = setTimeout(() => {
             fetchVideoInfo(url);
         }, 500);
     } else if (url) {
-        // For non-YouTube, hide info and show standard selector
         hideVideoInfo();
     } else {
         hideVideoInfo();
@@ -259,8 +246,6 @@ downloadBtn.addEventListener('click', async () => {
     hideMessages();
     setLoading(true);
 
-    // For YouTube, we keep the in-app progress bar because we need to select quality
-    // For others, we want "Native Download" experience
     const isYouTube = isYouTubeURL(url);
 
     if (isYouTube) {
@@ -272,7 +257,6 @@ downloadBtn.addEventListener('click', async () => {
     try {
         const audioOnly = audioOnlyCheckbox.checked;
 
-        // Determine quality
         let quality = 'best';
         if (selectedQualityFormat && !audioOnly) {
             quality = selectedQualityFormat;
@@ -281,16 +265,15 @@ downloadBtn.addEventListener('click', async () => {
         }
 
         if (audioOnly) {
-            await downloadAudio(url, !isYouTube); // Pass flag for native download
+            await downloadAudio(url, !isYouTube);
         } else {
-            await downloadVideo(url, quality, !isYouTube); // Pass flag for native download
+            await downloadVideo(url, quality, !isYouTube);
         }
 
         if (isYouTube) {
             showSuccess();
             showSuccessActions();
         } else {
-            // For native download, we just reset after a delay
             setTimeout(() => {
                 showSuccess();
                 resetApp();
@@ -313,7 +296,6 @@ async function resetApp() {
     showProgress(false);
     if (loadingState) loadingState.classList.add('hidden');
 
-    // Notify user using Service Worker (mobile-compatible)
     if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
         try {
             const registration = await navigator.serviceWorker.ready;
@@ -333,8 +315,7 @@ async function downloadVideo(url, quality, useNative = false) {
     const endpoint = `${API_BASE_URL}/download`;
 
     if (useNative) {
-        // Native Download: Trigger native behavior via notification + fetch
-        triggerNativeDownload(endpoint, { url, quality });
+        await triggerNativeDownload(endpoint, { url, quality });
         return;
     }
 
@@ -379,7 +360,7 @@ async function downloadAudio(url, useNative = false) {
     const endpoint = `${API_BASE_URL}/audio`;
 
     if (useNative) {
-        triggerNativeDownload(endpoint, { url });
+        await triggerNativeDownload(endpoint, { url });
         return;
     }
 
@@ -408,6 +389,31 @@ async function downloadAudio(url, useNative = false) {
     }
 
     const blob = new Blob(chunks);
+    downloadBlob(blob, 'audio.mp3');
+    updateProgress(100);
+}
+
+// Helper to trigger native browser download
+async function triggerNativeDownload(endpoint, data) {
+    if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            registration.showNotification('جاري التحميل...', {
+                body: 'يتم الآن تحميل الملف في الخلفية',
+                icon: '/icons/icon-192.png',
+                badge: '/icons/icon-192.png',
+                tag: 'download-progress'
+            });
+        } catch (error) {
+            console.log('Notification failed:', error);
+        }
+    }
+
+    if (endpoint.includes('audio')) {
+        return downloadAudio(data.url, false);
+    } else {
+        return downloadVideo(data.url, data.quality, false);
+    }
 }
 
 // Helper function to download blob
@@ -425,7 +431,6 @@ function downloadBlob(blob, filename) {
 
 // Check for shared URL
 window.addEventListener('DOMContentLoaded', async () => {
-    // Register service worker
     if ('serviceWorker' in navigator) {
         try {
             await navigator.serviceWorker.register('service-worker.js');
@@ -434,16 +439,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Request Notification Permission
     if ('Notification' in window && Notification.permission !== 'granted') {
         Notification.requestPermission();
     }
 
-    // Handle share target
     const urlParams = new URLSearchParams(window.location.search);
     let sharedUrl = urlParams.get('url') || urlParams.get('text') || urlParams.get('title') || '';
 
-    // Extract URL if it's embedded in text
     if (sharedUrl && !sharedUrl.startsWith('http')) {
         const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
         if (urlMatch) {
@@ -455,15 +457,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         urlInput.value = sharedUrl;
         urlInput.dispatchEvent(new Event('input'));
 
-        // Clear URL parameters
         window.history.replaceState({}, document.title, window.location.pathname);
 
-        // AUTO DOWNLOAD LOGIC
-        // If it's NOT YouTube, start downloading immediately
         if (!isYouTubeURL(sharedUrl)) {
             console.log('Auto-downloading non-YouTube URL...');
             showMessage('جاري بدء التحميل التلقائي...', 'info');
-            // Small delay to ensure UI is ready
             setTimeout(() => {
                 downloadBtn.click();
             }, 1000);
@@ -474,7 +472,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 // Disable quality select when audio-only is checked
 audioOnlyCheckbox.addEventListener('change', (e) => {
     if (qualitySelect) qualitySelect.disabled = e.target.checked;
-    // Also disable quality cards opacity
     if (qualitiesContainer) {
         qualitiesContainer.style.opacity = e.target.checked ? '0.5' : '1';
         qualitiesContainer.style.pointerEvents = e.target.checked ? 'none' : 'auto';
