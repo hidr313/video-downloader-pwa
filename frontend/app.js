@@ -306,18 +306,25 @@ downloadBtn.addEventListener('click', async () => {
 });
 
 // Reset App State
-function resetApp() {
+async function resetApp() {
     urlInput.value = '';
     hideVideoInfo();
     hideMessages();
     showProgress(false);
     if (loadingState) loadingState.classList.add('hidden');
-    // Notify user
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('محمّل الفيديوهات', {
-            body: 'التطبيق جاهز للتحميل التالي!',
-            icon: '/icons/icon-192.png'
-        });
+
+    // Notify user using Service Worker (mobile-compatible)
+    if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            registration.showNotification('محمّل الفيديوهات', {
+                body: 'التطبيق جاهز للتحميل التالي!',
+                icon: '/icons/icon-192.png',
+                badge: '/icons/icon-192.png'
+            });
+        } catch (error) {
+            console.log('Notification failed:', error);
+        }
     }
 }
 
@@ -401,27 +408,6 @@ async function downloadAudio(url, useNative = false) {
     }
 
     const blob = new Blob(chunks);
-    downloadBlob(blob, 'audio.mp3');
-    updateProgress(100);
-}
-
-// Helper to trigger native browser download
-function triggerNativeDownload(endpoint, data) {
-    // Notify user that download is starting in background
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('جاري التحميل...', {
-            body: 'يتم الآن تحميل الملف في الخلفية',
-            icon: '/icons/icon-192.png',
-            tag: 'download-progress'
-        });
-    }
-
-    // We call the standard download logic, but we treat it as "native" in UI
-    if (endpoint.includes('audio')) {
-        return downloadAudio(data.url, false); // False to use fetch
-    } else {
-        return downloadVideo(data.url, data.quality, false);
-    }
 }
 
 // Helper function to download blob

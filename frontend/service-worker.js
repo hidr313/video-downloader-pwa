@@ -1,4 +1,4 @@
-const CACHE_NAME = 'video-downloader-v5';
+const CACHE_NAME = 'video-downloader-v6';
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
