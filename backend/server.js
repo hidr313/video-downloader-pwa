@@ -61,7 +61,6 @@ app.post('/api/info', async (req, res) => {
         const info = await ytdlp(url, {
             dumpSingleJson: true,
             noWarnings: true,
-            noCallHome: true,
             noCheckCertificate: true,
             preferFreeFormats: true,
         });
@@ -191,9 +190,8 @@ app.post('/api/download', async (req, res) => {
             output: outputPath,
             format: formatSelection,
             mergeOutputFormat: 'mp4',
-            ffmpegLocation: '/usr/bin/ffmpeg', // Explicitly set ffmpeg path
+            ffmpegLocation: '/usr/bin/ffmpeg',
             noWarnings: true,
-            noCallHome: true,
             noCheckCertificate: true,
             addMetadata: true,
         });
@@ -248,9 +246,8 @@ app.post('/api/audio', async (req, res) => {
             output: outputPath,
             extractAudio: true,
             audioFormat: 'mp3',
-            audioQuality: 0, // Best quality
+            audioQuality: 0,
             noWarnings: true,
-            noCallHome: true,
             noCheckCertificate: true,
             addMetadata: true,
             embedThumbnail: true,
