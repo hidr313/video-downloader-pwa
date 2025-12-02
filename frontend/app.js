@@ -371,31 +371,6 @@ async function downloadAudio(url, useNative = false) {
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'فشل تحميل الصوت');
-    }
-
-    const contentLength = +response.headers.get('Content-Length');
-    const reader = response.body.getReader();
-    let receivedLength = 0;
-    const chunks = [];
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        receivedLength += value.length;
-        if (contentLength) updateProgress((receivedLength / contentLength) * 100);
-    }
-
-    const blob = new Blob(chunks);
-    downloadBlob(blob, 'audio.mp3');
-    updateProgress(100);
-}
-
-// Helper to trigger native browser download
-async function triggerNativeDownload(endpoint, data) {
-    if ('serviceWorker' in navigator && 'Notification' in window && Notification.permission === 'granted') {
         try {
             const registration = await navigator.serviceWorker.ready;
             registration.showNotification('جاري التحميل...', {
